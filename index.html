@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Raghav Singhal — Command Deck</title>
+<meta name="description" content="Raghav Singhal · AI × Robotics Engineer · Builder of autonomous cars & quadcopters · Future founder. An interactive 3D resume." />
+<style>
+  :root{
+    --cyan:#3df0ff; --cyan-d:#11c4e0; --purple:#9d6bff; --pink:#ff5fd2;
+    --bg0:#02030a; --bg1:#060a1c; --ink:#dff6ff; --muted:#8fb8cc;
+    --glass: rgba(8,16,34,.55); --line: rgba(61,240,255,.28);
+    --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    --mono: "SFMono-Regular", ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:radial-gradient(120% 90% at 50% 0%, #0a1430 0%, var(--bg1) 40%, var(--bg0) 100%);
+    color:var(--ink); font-family:var(--font); overflow-x:hidden;
+    -webkit-font-smoothing:antialiased; cursor:default;
+  }
+  a{color:inherit; text-decoration:none;}
+
+  /* ---- 3D canvas pinned in back ---- */
+  #scene{position:fixed; inset:0; z-index:0;}
+  #loader{
+    position:fixed; inset:0; z-index:50; display:grid; place-items:center;
+    background:var(--bg0); transition:opacity .8s ease;
+  }
+  #loader .mono{font-family:var(--mono); color:var(--cyan); letter-spacing:.35em; font-size:13px;}
+  #loader .ring{
+    width:54px;height:54px;margin:0 auto 22px;border-radius:50%;
+    border:2px solid rgba(61,240,255,.15); border-top-color:var(--cyan);
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #loader.hide{opacity:0; pointer-events:none;}
+
+  /* ---- scroll spacer drives the camera ---- */
+  #scroll{position:relative; z-index:1; pointer-events:none;}
+  .panelStop{height:100vh;}
+
+  /* ---- fixed HUD frame ---- */
+  .hud{position:fixed; z-index:5; pointer-events:none;}
+  .corner{width:46px;height:46px;border:1.5px solid var(--line);}
+  .tl{top:18px;left:18px;border-right:0;border-bottom:0;}
+  .tr{top:18px;right:18px;border-left:0;border-bottom:0;}
+  .bl{bottom:18px;left:18px;border-right:0;border-top:0;}
+  .br{bottom:18px;right:18px;border-left:0;border-top:0;}
+
+  /* ---- top bar ---- */
+  .topbar{
+    position:fixed; z-index:8; top:0; left:0; right:0; height:64px;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 34px; pointer-events:none;
+  }
+  .brand{display:flex; align-items:center; gap:12px; pointer-events:auto;}
+  .mono-badge{
+    width:40px;height:40px;border-radius:10px; display:grid; place-items:center;
+    font-family:var(--mono); font-weight:700; font-size:16px; color:#021018;
+    background:linear-gradient(135deg,var(--cyan),var(--purple));
+    box-shadow:0 0 18px rgba(61,240,255,.55), inset 0 0 8px rgba(255,255,255,.4);
+  }
+  .brand .name{font-weight:600; letter-spacing:.16em; font-size:13px;}
+  .brand .sub{font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:.2em;}
+  .cta{display:flex; gap:10px; pointer-events:auto;}
+  .btn{
+    font-family:var(--mono); font-size:11px; letter-spacing:.12em; color:var(--cyan);
+    border:1px solid var(--line); background:rgba(8,18,38,.5); backdrop-filter:blur(6px);
+    padding:9px 14px; border-radius:8px; transition:.2s; cursor:pointer; white-space:nowrap;
+  }
+  .btn:hover{background:rgba(61,240,255,.14); box-shadow:0 0 16px rgba(61,240,255,.4); transform:translateY(-1px);}
+  .btn.solid{color:#021018; background:linear-gradient(135deg,var(--cyan),var(--purple)); border-color:transparent;}
+  .btn.solid:hover{box-shadow:0 0 22px rgba(157,107,255,.6);}
+
+  /* ---- left nav rail ---- */
+  .nav{
+    position:fixed; z-index:8; left:30px; top:50%; transform:translateY(-50%);
+    display:flex; flex-direction:column; gap:18px; pointer-events:auto;
+  }
+  .nav button{
+    display:flex; align-items:center; gap:12px; background:none; border:0; cursor:pointer;
+    color:var(--muted); font-family:var(--mono); font-size:10px; letter-spacing:.18em; padding:0;
+  }
+  .nav .dot{
+    width:11px;height:11px;border-radius:50%; border:1.5px solid var(--line);
+    transition:.25s; flex:none; position:relative;
+  }
+  .nav button .lbl{opacity:0; transform:translateX(-6px); transition:.25s;}
+  .nav button:hover .lbl{opacity:1; transform:none;}
+  .nav button.active .dot{background:var(--cyan); border-color:var(--cyan); box-shadow:0 0 12px var(--cyan); transform:scale(1.25);}
+  .nav button.active{color:var(--cyan);}
+  .nav button.active .lbl{opacity:1; transform:none;}
+
+  /* ---- content panels ---- */
+  .stage{position:fixed; z-index:6; inset:0; pointer-events:none;}
+  .panel{
+    position:absolute; left:0; right:0; top:0; bottom:0; display:flex; align-items:center;
+    padding:0 7vw 0 110px; opacity:0; transform:translateY(40px) scale(.98);
+    transition:opacity .6s ease, transform .6s ease; pointer-events:none;
+  }
+  .panel.show{opacity:1; transform:none; pointer-events:auto;}
+  .card{
+    max-width:560px; background:var(--glass); backdrop-filter:blur(14px);
+    border:1px solid var(--line); border-radius:18px; padding:30px 34px;
+    box-shadow:0 24px 70px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+    position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:""; position:absolute; inset:0; border-radius:18px; padding:1px;
+    background:linear-gradient(135deg, rgba(61,240,255,.6), transparent 40%, transparent 60%, rgba(157,107,255,.5));
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none;
+  }
+  .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.4em; color:var(--cyan); margin-bottom:14px; display:flex; align-items:center; gap:10px;}
+  .eyebrow::before{content:""; width:26px; height:1px; background:var(--cyan); box-shadow:0 0 8px var(--cyan);}
+  h1{font-size:clamp(34px,6vw,62px); line-height:1.02; font-weight:800; letter-spacing:-.01em;
+     background:linear-gradient(120deg,#fff,var(--cyan) 55%,var(--purple)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  h2{font-size:clamp(26px,4vw,40px); font-weight:800; margin-bottom:6px; letter-spacing:-.01em;}
+  h2 .accent{background:linear-gradient(120deg,var(--cyan),var(--purple)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .role{height:30px; margin:14px 0 8px; font-family:var(--mono); font-size:clamp(14px,2.4vw,20px); color:var(--cyan); letter-spacing:.04em;}
+  .role b{color:#fff; font-weight:600;}
+  .meta{display:flex; gap:8px 18px; flex-wrap:wrap; font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:12px;}
+  .meta span{display:inline-flex; align-items:center; gap:6px;}
+  p.lead{color:var(--ink); font-size:15px; line-height:1.7; margin-top:6px;}
+  p.body{color:var(--muted); font-size:14.5px; line-height:1.7; margin-top:10px;}
+  ul.feat{list-style:none; margin-top:14px; display:grid; gap:10px;}
+  ul.feat li{position:relative; padding-left:22px; font-size:14px; line-height:1.55; color:var(--ink);}
+  ul.feat li::before{content:"▹"; position:absolute; left:0; color:var(--cyan);}
+  .tag-wrap{display:flex; flex-wrap:wrap; gap:9px; margin-top:8px;}
+  .group{margin-top:16px;}
+  .group h4{font-family:var(--mono); font-size:11px; letter-spacing:.2em; color:var(--purple); margin-bottom:9px;}
+  .tag{font-family:var(--mono); font-size:11.5px; color:var(--cyan); border:1px solid var(--line);
+       background:rgba(61,240,255,.06); padding:6px 11px; border-radius:7px;}
+  .twocol{display:grid; grid-template-columns:1fr; gap:16px;}
+  .subcard{border:1px solid var(--line); border-radius:13px; padding:16px 18px; background:rgba(6,14,30,.5);}
+  .subcard .ttl{font-weight:700; font-size:15px; margin-bottom:3px;}
+  .subcard .when{font-family:var(--mono); font-size:11px; color:var(--purple); letter-spacing:.1em;}
+  .subcard p{color:var(--muted); font-size:13px; line-height:1.55; margin-top:7px;}
+  .medals{display:flex; gap:14px; margin-top:14px;}
+  .medal{flex:1; border:1px solid var(--line); border-radius:13px; padding:16px; text-align:center; background:rgba(6,14,30,.5);}
+  .medal .m{font-size:30px;}
+  .medal .y{font-family:var(--mono); font-size:12px; color:var(--cyan); margin-top:4px;}
+  .medal .t{font-size:12px; color:var(--muted); margin-top:2px;}
+  .contact-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px;}
+  .clink{display:flex; align-items:center; gap:12px; border:1px solid var(--line); border-radius:12px;
+         padding:14px 16px; background:rgba(6,14,30,.5); transition:.2s; cursor:pointer; pointer-events:auto;}
+  .clink:hover{background:rgba(61,240,255,.12); box-shadow:0 0 20px rgba(61,240,255,.3); transform:translateY(-2px);}
+  .clink .ic{width:34px;height:34px;border-radius:9px; display:grid; place-items:center; font-size:16px;
+             background:linear-gradient(135deg,rgba(61,240,255,.22),rgba(157,107,255,.22)); border:1px solid var(--line);}
+  .clink .tx b{display:block; font-size:13.5px;}
+  .clink .tx small{font-family:var(--mono); font-size:10.5px; color:var(--muted);}
+
+  .scrollhint{
+    position:fixed; z-index:7; bottom:26px; left:50%; transform:translateX(-50%);
+    font-family:var(--mono); font-size:10px; letter-spacing:.3em; color:var(--muted);
+    display:flex; flex-direction:column; align-items:center; gap:9px; transition:opacity .5s; pointer-events:none;
+  }
+  .mouse{width:22px;height:34px;border:1.5px solid var(--line); border-radius:12px; position:relative;}
+  .mouse::after{content:""; position:absolute; left:50%; top:7px; width:3px; height:6px; border-radius:2px;
+    background:var(--cyan); transform:translateX(-50%); animation:wheel 1.6s ease infinite;}
+  @keyframes wheel{0%{opacity:0;transform:translate(-50%,0)}30%{opacity:1}100%{opacity:0;transform:translate(-50%,12px)}}
+
+  .footer-tag{position:fixed; z-index:5; bottom:22px; right:30px; font-family:var(--mono); font-size:9.5px;
+    letter-spacing:.2em; color:rgba(143,184,204,.5); pointer-events:none;}
+
+  @media (max-width:720px){
+    .topbar{padding:0 16px; height:58px;}
+    .brand .sub{display:none;}
+    .cta .lbltxt{display:none;}
+    .btn{padding:9px 11px;}
+    .nav{left:14px; gap:14px;}
+    .nav button .lbl{display:none;}
+    .panel{padding:80px 18px 90px; align-items:center;}
+    .card{padding:22px 20px; max-width:none;}
+    .contact-grid{grid-template-columns:1fr;}
+    .footer-tag{display:none;}
+  }
+  @media (max-width:720px) and (orientation:landscape){
+    .panel{align-items:center;}
+  }
+</style>
+</head>
+<body>
+
+<div id="scene"></div>
+
+<!-- HUD corners -->
+<div class="hud corner tl"></div><div class="hud corner tr"></div>
+<div class="hud corner bl"></div><div class="hud corner br"></div>
+
+<!-- top bar -->
+<div class="topbar">
+  <div class="brand">
+    <div class="mono-badge">RS</div>
+    <div>
+      <div class="name">RAGHAV&nbsp;SINGHAL</div>
+      <div class="sub">COMMAND&nbsp;DECK&nbsp;//&nbsp;v1.0</div>
+    </div>
+  </div>
+  <div class="cta">
+    <a class="btn" href="https://github.com/Rsinghal1801" target="_blank" rel="noopener">⌥ <span class="lbltxt">GITHUB</span></a>
+    <a class="btn" href="https://linkedin.com/in/raghav-singhal18" target="_blank" rel="noopener">in <span class="lbltxt">LINKEDIN</span></a>
+    <a class="btn solid" href="raghav_singhal_resume.pdf" download>↓ <span class="lbltxt">RÉSUMÉ</span></a>
+  </div>
+</div>
+
+<!-- left nav -->
+<nav class="nav" id="nav"></nav>
+
+<!-- content panels -->
+<div class="stage" id="stage">
+
+  <!-- 0 INTRO -->
+  <section class="panel" data-i="0">
+    <div class="card">
+      <div class="eyebrow">INCOMING TRANSMISSION</div>
+      <h1>RAGHAV<br>SINGHAL</h1>
+      <div class="role" id="roleRotate"></div>
+      <div class="meta">
+        <span>◎ Mathura, Uttar Pradesh, India</span>
+        <span>◆ B.Tech CSDS · Rishihood University</span>
+      </div>
+      <p class="lead">I build autonomous machines — from self-driving cars to custom quadcopters — and merge them with artificial intelligence. Scroll to fly through the deck, or tap a node on the left.</p>
+    </div>
+  </section>
+
+  <!-- 1 ABOUT -->
+  <section class="panel" data-i="1">
+    <div class="card">
+      <div class="eyebrow">01 · MISSION PROFILE</div>
+      <h2>Builder. <span class="accent">Engineer. Founder.</span></h2>
+      <p class="body">An ambitious, hands-on engineering student and future founder with a proven track record of designing and building complex physical systems — including autonomous cars and quadcopters — independently, before even entering university.</p>
+      <p class="body">A state-medalist athlete who channels competitive calm, precision, and relentless focus into merging advanced hardware engineering with cutting-edge AI. Eager to collaborate with forward-thinking builders and ship impactful solutions in intelligent robotics.</p>
+    </div>
+  </section>
+
+  <!-- 2 EDUCATION -->
+  <section class="panel" data-i="2">
+    <div class="card">
+      <div class="eyebrow">02 · TRAINING CORE</div>
+      <h2>Rishihood <span class="accent">University</span></h2>
+      <div class="subcard">
+        <div class="ttl">B.Tech — Computer Science &amp; Data Science</div>
+        <div class="when">MAY 2026 — JULY 2030</div>
+        <p>Core focus: deepening C++, Python &amp; Machine Learning to seamlessly merge robust robotic hardware with cognitive intelligence — tailoring studies toward foundational architectures for scalable autonomous agents.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 PROJECTS -->
+  <section class="panel" data-i="3">
+    <div class="card">
+      <div class="eyebrow">03 · HANGAR BAY</div>
+      <h2>Key <span class="accent">Builds</span></h2>
+      <div class="twocol">
+        <div class="subcard">
+          <div class="ttl">⛟ Autonomous Vehicle Prototype</div>
+          <div class="when">PRE-UNIVERSITY · HW + SW INTEGRATION</div>
+          <p>Engineered a fully functional self-driving prototype with full-stack hardware-to-software integration for spatial positioning, environment sensing &amp; mobility. Now scaling the decision pipeline with Python &amp; ML for sharper self-navigation.</p>
+        </div>
+        <div class="subcard">
+          <div class="ttl">⊹ Custom Quadcopters &amp; Robotics</div>
+          <div class="when">PRE-UNIVERSITY · HW ARCHITECTURE</div>
+          <p>Designed, assembled &amp; calibrated high-performance quadcopters from scratch — programmed flight controllers, balanced flight dynamics, managed power distribution, and optimized frames for durability &amp; payload.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 SKILLS -->
+  <section class="panel" data-i="4">
+    <div class="card">
+      <div class="eyebrow">04 · SYSTEMS LOADOUT</div>
+      <h2>Technical <span class="accent">Stack</span></h2>
+      <div class="group"><h4>CORE PROGRAMMING</h4><div class="tag-wrap">
+        <span class="tag">Python</span><span class="tag">C++</span><span class="tag">JavaScript</span></div></div>
+      <div class="group"><h4>SPECIALIZED DOMAINS</h4><div class="tag-wrap">
+        <span class="tag">Artificial Intelligence</span><span class="tag">Machine Learning</span><span class="tag">Data Science</span><span class="tag">Intelligent Robotics</span><span class="tag">Embedded Systems</span></div></div>
+      <div class="group"><h4>HARDWARE COMPETENCY</h4><div class="tag-wrap">
+        <span class="tag">Autonomous Car Architecture</span><span class="tag">Quadcopter Design</span><span class="tag">Mechanical Assembly</span><span class="tag">System Calibration</span></div></div>
+      <div class="group"><h4>WEB</h4><div class="tag-wrap">
+        <span class="tag">HTML5</span><span class="tag">CSS3</span><span class="tag">Web Basics</span></div></div>
+    </div>
+  </section>
+
+  <!-- 5 AWARDS -->
+  <section class="panel" data-i="5">
+    <div class="card">
+      <div class="eyebrow">05 · COMMENDATIONS</div>
+      <h2>State <span class="accent">Archery Champion</span></h2>
+      <p class="body">State-level medalist whose elite physical precision, high-pressure emotional control, and steady composure translate directly into engineering execution and complex debugging under stress.</p>
+      <div class="medals">
+        <div class="medal"><div class="m">🥈</div><div class="y">2022</div><div class="t">Silver Medal</div></div>
+        <div class="medal"><div class="m">🥉</div><div class="y">2023</div><div class="t">Bronze Medal</div></div>
+      </div>
+      <div class="group"><h4>LANGUAGES</h4><div class="tag-wrap">
+        <span class="tag">English — Professional</span><span class="tag">Hindi — Professional</span><span class="tag">German — Limited</span></div></div>
+    </div>
+  </section>
+
+  <!-- 6 CONTACT -->
+  <section class="panel" data-i="6">
+    <div class="card">
+      <div class="eyebrow">06 · OPEN CHANNEL</div>
+      <h2>Let's <span class="accent">build something</span></h2>
+      <p class="body">Open to collaborations in AI &amp; intelligent robotics. Reach the deck through any channel below.</p>
+      <div class="contact-grid">
+        <a class="clink" href="mailto:raghavsinghal1801@gmail.com">
+          <div class="ic">✉</div><div class="tx"><b>Email</b><small>raghavsinghal1801@gmail.com</small></div></a>
+        <a class="clink" href="https://github.com/Rsinghal1801" target="_blank" rel="noopener">
+          <div class="ic">⌥</div><div class="tx"><b>GitHub</b><small>Rsinghal1801</small></div></a>
+        <a class="clink" href="https://linkedin.com/in/raghav-singhal18" target="_blank" rel="noopener">
+          <div class="ic">in</div><div class="tx"><b>LinkedIn</b><small>raghav-singhal18</small></div></a>
+        <a class="clink" href="raghav_singhal_resume.pdf" download>
+          <div class="ic">↓</div><div class="tx"><b>Résumé</b><small>Download PDF</small></div></a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="scrollhint" id="scrollhint"><div class="mouse"></div>SCROLL TO EXPLORE</div>
+<div class="footer-tag">// RENDERED IN REAL-TIME · THREE.JS</div>
+
+<!-- scroll driver -->
+<div id="scroll">
+  <div class="panelStop"></div><div class="panelStop"></div><div class="panelStop"></div>
+  <div class="panelStop"></div><div class="panelStop"></div><div class="panelStop"></div>
+  <div class="panelStop"></div>
+</div>
+
+<!-- loader -->
+<div id="loader"><div><div class="ring"></div><div class="mono">INITIALIZING DECK…</div></div></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+const CY = 0x3df0ff, PU = 0x9d6bff, PK = 0xff5fd2;
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- renderer / scene / camera ---------- */
+const canvasHost = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+canvasHost.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x03060f, 0.012);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 600);
+camera.position.set(0, 1.2, 12);
+
+/* ---------- lights ---------- */
+scene.add(new THREE.AmbientLight(0x4060a0, 0.7));
+const key = new THREE.PointLight(CY, 2.2, 120); key.position.set(8, 10, 10); scene.add(key);
+const fill = new THREE.PointLight(PU, 1.8, 120); fill.position.set(-10, -4, 6); scene.add(fill);
+const rim = new THREE.PointLight(PK, 1.2, 100); rim.position.set(0, 6, -40); scene.add(rim);
+
+/* ---------- helpers ---------- */
+function glowSprite(color, size, opacity){
+  const c = document.createElement('canvas'); c.width=c.height=128;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(64,64,0,64,64,64);
+  const col = new THREE.Color(color);
+  const rgb = `${col.r*255|0},${col.g*255|0},${col.b*255|0}`;
+  grd.addColorStop(0,`rgba(${rgb},1)`); grd.addColorStop(.25,`rgba(${rgb},.55)`); grd.addColorStop(1,`rgba(${rgb},0)`);
+  g.fillStyle=grd; g.fillRect(0,0,128,128);
+  const tex = new THREE.CanvasTexture(c);
+  const m = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, color:0xffffff, transparent:true, opacity:opacity??.8, blending:THREE.AdditiveBlending, depthWrite:false }));
+  m.scale.set(size,size,1); return m;
+}
+
+/* ---------- starfield ---------- */
+function starfield(count, spread, size, color){
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count*3);
+  for(let i=0;i<count;i++){
+    pos[i*3]   = (Math.random()-.5)*spread;
+    pos[i*3+1] = (Math.random()-.5)*spread;
+    pos[i*3+2] = (Math.random()-.5)*spread - 60;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const mat = new THREE.PointsMaterial({ color, size, sizeAttenuation:true, transparent:true, opacity:.9, blending:THREE.AdditiveBlending, depthWrite:false });
+  return new THREE.Points(geo, mat);
+}
+const stars1 = starfield(1400, 320, 0.5, 0xbfe9ff);
+const stars2 = starfield(700, 260, 0.9, 0x9d6bff);
+scene.add(stars1, stars2);
+
+/* nebula clouds */
+[ [CY,60,-30,-10,-50,.18], [PU,70,40,-20,-90,.16], [PK,50,-30,20,-120,.12], [CY,90,30,-40,-180,.12], [PU,80,-50,30,-150,.1] ].forEach(([c,s,x,y,z,o])=>{
+  const n = glowSprite(c, s, o); n.position.set(x,y,z); scene.add(n);
+});
+
+/* ===================== BIG WORLD ===================== */
+
+/* ---- distant sun / star with corona ---- */
+const sun = new THREE.Mesh(new THREE.SphereGeometry(7,32,32),
+  new THREE.MeshBasicMaterial({ color:0xfff2d8 }));
+sun.position.set(150, 70, -260); scene.add(sun);
+const corona = glowSprite(0xffd9a0, 120, .9); corona.position.copy(sun.position); scene.add(corona);
+const corona2 = glowSprite(CY, 200, .25); corona2.position.copy(sun.position); scene.add(corona2);
+
+/* ---- planet with atmosphere + wireframe shell + ring ---- */
+const planet = new THREE.Group(); planet.position.set(-70, -60, -150); scene.add(planet);
+const pBody = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 32),
+  new THREE.MeshStandardMaterial({ color:0x0a1838, emissive:0x0b2050, emissiveIntensity:.5, metalness:.3, roughness:.85 }));
+planet.add(pBody);
+const pWire = new THREE.Mesh(new THREE.SphereGeometry(40.4, 18, 18),
+  new THREE.MeshBasicMaterial({ color:CY, wireframe:true, transparent:true, opacity:.12 }));
+planet.add(pWire);
+const pGlow = glowSprite(CY, 150, .35); planet.add(pGlow);
+const pRing = new THREE.Mesh(new THREE.RingGeometry(52, 70, 80),
+  new THREE.MeshBasicMaterial({ color:PU, side:THREE.DoubleSide, transparent:true, opacity:.18, blending:THREE.AdditiveBlending, depthWrite:false }));
+pRing.rotation.x = Math.PI/2.2; pRing.rotation.z = .3; planet.add(pRing);
+// a small moon orbiting the planet
+const moonPivot = new THREE.Group(); planet.add(moonPivot);
+const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(6,1),
+  new THREE.MeshStandardMaterial({ color:0x14223f, emissive:PU, emissiveIntensity:.4, flatShading:true, metalness:.4, roughness:.7 }));
+moon.position.set(64,8,0); moonPivot.add(moon);
+
+/* ---- second far planet (red) for depth ---- */
+const planet2 = new THREE.Mesh(new THREE.SphereGeometry(18, 32, 32),
+  new THREE.MeshStandardMaterial({ color:0x2a0f1c, emissive:0x661030, emissiveIntensity:.5, roughness:.9 }));
+planet2.position.set(95, -30, -120); scene.add(planet2);
+scene.add((()=>{const g=glowSprite(PK,60,.3); g.position.copy(planet2.position); return g;})());
+
+/* ---- energy grid floor (gives the world a "ground") ---- */
+const grid = new THREE.GridHelper(500, 50, CY, 0x143a55);
+grid.position.y = -34; grid.material.transparent = true; grid.material.opacity = .25;
+scene.add(grid);
+const grid2 = new THREE.GridHelper(500, 50, PU, 0x241455);
+grid2.position.y = 60; grid2.material.transparent = true; grid2.material.opacity = .1;
+scene.add(grid2);
+
+/* ---- asteroid / debris field ---- */
+const asteroids = [];
+const rockMat = new THREE.MeshStandardMaterial({ color:0x0c1426, emissive:0x0a1a30, emissiveIntensity:.3, flatShading:true, metalness:.5, roughness:.7 });
+for(let i=0;i<38;i++){
+  const r = 0.4 + Math.random()*2.2;
+  const m = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), rockMat);
+  m.position.set((Math.random()-.5)*180, (Math.random()-.5)*70, -Math.random()*180 - 10);
+  m.rotation.set(Math.random()*6, Math.random()*6, Math.random()*6);
+  m.userData = { rx:(Math.random()-.5)*0.4, ry:(Math.random()-.5)*0.4, fx:Math.random()*6 };
+  scene.add(m); asteroids.push(m);
+}
+
+/* ---- floating holographic data slabs scattered in the world ---- */
+const slabTex = (()=>{ const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d');
+  g.strokeStyle='rgba(61,240,255,.9)'; g.lineWidth=2; for(let i=0;i<8;i++){ g.beginPath(); g.moveTo(10,16*i+8); g.lineTo(118,16*i+8); g.stroke(); }
+  return new THREE.CanvasTexture(c); })();
+const holoSlabs = [];
+for(let i=0;i<6;i++){
+  const w = 2+Math.random()*3, h = 1.4+Math.random()*2;
+  const s = new THREE.Mesh(new THREE.PlaneGeometry(w,h),
+    new THREE.MeshBasicMaterial({ map:slabTex, color:i%2?PU:CY, transparent:true, opacity:.28, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, depthWrite:false }));
+  s.position.set((Math.random()-.5)*70, (Math.random()-.5)*30, -Math.random()*160);
+  s.rotation.y = Math.random()*Math.PI; s.userData.fy = Math.random()*6;
+  scene.add(s); holoSlabs.push(s);
+}
+
+/* ---- warp gates along the camera path (camera flies THROUGH them) ---- */
+const gates = [];
+function buildGate(color){
+  const grp = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(6, 0.25, 12, 64),
+    new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:1.6, metalness:.6, roughness:.3 }));
+  grp.add(ring);
+  for(let k=0;k<8;k++){ // strut nodes around the gate
+    const a = k/8*Math.PI*2;
+    const n = new THREE.Mesh(new THREE.OctahedronGeometry(0.5,0),
+      new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:1.8 }));
+    n.position.set(Math.cos(a)*6, Math.sin(a)*6, 0); grp.add(n);
+  }
+  const inner = new THREE.Mesh(new THREE.CircleGeometry(5.7, 48),
+    new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.07, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, depthWrite:false }));
+  grp.add(inner);
+  grp.userData = { ring, inner, spin:(Math.random()-.5)*0.6 };
+  return grp;
+}
+
+/* ---------- holographic monogram texture ---------- */
+function makeLabel(text, sub){
+  const c = document.createElement('canvas'); c.width=512; c.height=256;
+  const g = c.getContext('2d'); g.clearRect(0,0,512,256);
+  g.font = '700 150px "Segoe UI", sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+  const grd = g.createLinearGradient(120,0,400,0);
+  grd.addColorStop(0,'#3df0ff'); grd.addColorStop(1,'#9d6bff');
+  g.fillStyle = grd; g.shadowColor='#3df0ff'; g.shadowBlur=30;
+  g.fillText(text, 256, 110);
+  if(sub){ g.shadowBlur=0; g.font='600 30px monospace'; g.fillStyle='rgba(143,184,204,.9)'; g.fillText(sub, 256, 210); }
+  const t = new THREE.CanvasTexture(c); t.anisotropy=4; return t;
+}
+
+/* ---------- central station core ---------- */
+const station = new THREE.Group(); scene.add(station);
+// core icosahedron wireframe
+const core = new THREE.Mesh(
+  new THREE.IcosahedronGeometry(1.6, 1),
+  new THREE.MeshStandardMaterial({ color:CY, emissive:CY, emissiveIntensity:.6, metalness:.6, roughness:.25, wireframe:true })
+);
+station.add(core);
+const coreInner = new THREE.Mesh(
+  new THREE.IcosahedronGeometry(1.1, 0),
+  new THREE.MeshStandardMaterial({ color:PU, emissive:PU, emissiveIntensity:1.1, metalness:.3, roughness:.4 })
+);
+station.add(coreInner);
+station.add(glowSprite(CY, 9, .5));
+// rotating rings
+const rings = [];
+for(let i=0;i<3;i++){
+  const r = new THREE.Mesh(
+    new THREE.TorusGeometry(2.6 + i*0.7, 0.03, 8, 120),
+    new THREE.MeshStandardMaterial({ color:i%2?PU:CY, emissive:i%2?PU:CY, emissiveIntensity:1.4, metalness:.5, roughness:.3 })
+  );
+  r.rotation.x = Math.random()*Math.PI; r.rotation.y = Math.random()*Math.PI;
+  r.userData.sp = (i+1)*0.12*(i%2?-1:1);
+  rings.push(r); station.add(r);
+}
+// monogram billboard
+const mono = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.2),
+  new THREE.MeshBasicMaterial({ map:makeLabel('RS','// RAGHAV SINGHAL'), transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide }));
+mono.position.set(0, 3.3, 0); station.add(mono);
+
+/* ---------- quadcopter (hero) ---------- */
+function buildQuad(){
+  const q = new THREE.Group();
+  const mBody = new THREE.MeshStandardMaterial({ color:0x0e1730, emissive:CY, emissiveIntensity:.25, metalness:.85, roughness:.3 });
+  const mArm  = new THREE.MeshStandardMaterial({ color:0x13203f, emissive:PU, emissiveIntensity:.3, metalness:.7, roughness:.35 });
+  const mMotor= new THREE.MeshStandardMaterial({ color:CY, emissive:CY, emissiveIntensity:.9, metalness:.6, roughness:.3 });
+  const mProp = new THREE.MeshStandardMaterial({ color:0xbfe9ff, emissive:CY, emissiveIntensity:1.2, metalness:.4, roughness:.4, transparent:true, opacity:.55 });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.1,0.32,1.1), mBody); q.add(body);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.34,18,12,0,Math.PI*2,0,Math.PI/2), mMotor);
+  dome.position.y=0.16; dome.scale.set(1,.7,1); q.add(dome);
+
+  q.userData.props = [];
+  const off = 1.0;
+  [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([sx,sz])=>{
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,1.35,10), mArm);
+    arm.rotation.z = Math.PI/2; arm.rotation.y = Math.atan2(sz,sx);
+    arm.position.set(sx*off*0.5, 0, sz*off*0.5); q.add(arm);
+    const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,0.34,14), mMotor);
+    motor.position.set(sx*off, 0.05, sz*off); q.add(motor);
+    const hub = new THREE.Group(); hub.position.set(sx*off, 0.25, sz*off);
+    for(let b=0;b<2;b++){
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.95,0.02,0.1), mProp);
+      blade.rotation.y = b*Math.PI/2; hub.add(blade);
+    }
+    hub.userData.dir = (sx*sz)>0 ? 1 : -1;
+    q.add(hub); q.userData.props.push(hub);
+  });
+  return q;
+}
+const quad = buildQuad(); quad.scale.set(1.5,1.5,1.5);
+station.add(quad);
+
+/* ---------- low-poly autonomous car (projects node) ---------- */
+function buildCar(){
+  const car = new THREE.Group();
+  const mBody = new THREE.MeshStandardMaterial({ color:0x0e1730, emissive:PU, emissiveIntensity:.3, metalness:.85, roughness:.3 });
+  const mGlass= new THREE.MeshStandardMaterial({ color:CY, emissive:CY, emissiveIntensity:.7, metalness:.4, roughness:.2, transparent:true, opacity:.6 });
+  const mWheel= new THREE.MeshStandardMaterial({ color:0x05080f, metalness:.6, roughness:.5 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(2.4,0.5,1.2), mBody); base.position.y=0.45; car.add(base);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(1.3,0.5,1.0), mGlass); cab.position.set(-0.1,0.85,0); car.add(cab);
+  // lidar dome
+  const lidar = new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,0.18,16), new THREE.MeshStandardMaterial({color:CY,emissive:CY,emissiveIntensity:1.3}));
+  lidar.position.set(-0.1,1.2,0); car.add(lidar);
+  car.userData.wheels=[];
+  [[0.75,0.65],[0.75,-0.65],[-0.75,0.65],[-0.75,-0.65]].forEach(([x,z])=>{
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.22,16), mWheel);
+    w.rotation.x=Math.PI/2; w.position.set(x,0.32,z); car.add(w); car.userData.wheels.push(w);
+  });
+  // scanning beam
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(1.4,3,20,1,true),
+    new THREE.MeshBasicMaterial({color:CY, transparent:true, opacity:.08, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, depthWrite:false}));
+  beam.rotation.z=-Math.PI/2; beam.position.set(2.2,0.7,0); car.add(beam);
+  return car;
+}
+
+/* ---------- drone swarm escorting the hero ---------- */
+const drones = [];
+const droneMat = new THREE.MeshStandardMaterial({ color:CY, emissive:CY, emissiveIntensity:1.4, metalness:.5, roughness:.3 });
+for(let i=0;i<10;i++){
+  const d = new THREE.Mesh(new THREE.TetrahedronGeometry(0.22,0), droneMat.clone());
+  d.userData = { r:4+Math.random()*5, sp:0.3+Math.random()*0.6, ph:Math.random()*6, yA:(Math.random()-.5)*5, dir:Math.random()>.5?1:-1 };
+  station.add(d); drones.push(d);
+}
+
+/* ---------- per-node 3D structures ---------- */
+function buildNodeStructure(i, color){
+  const g = new THREE.Group();
+  const lit = (c,e)=> new THREE.MeshStandardMaterial({ color:c||color, emissive:c||color, emissiveIntensity:e||1.2, metalness:.6, roughness:.3 });
+  const dark = new THREE.MeshStandardMaterial({ color:0x0c1630, emissive:color, emissiveIntensity:.25, metalness:.8, roughness:.35 });
+  if(i===1){ // satellite with solar wings
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(1,1,1.4), dark));
+    [-1,1].forEach(s=>{ const w=new THREE.Mesh(new THREE.BoxGeometry(2.6,0.05,1.1), lit(PU,.7)); w.position.x=s*2; g.add(w);
+      const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.6,8),dark); arm.rotation.z=Math.PI/2; arm.position.x=s*0.9; g.add(arm); });
+    const dish=new THREE.Mesh(new THREE.SphereGeometry(0.6,16,8,0,Math.PI*2,0,Math.PI/2),lit()); dish.rotation.x=Math.PI; dish.position.y=0.8; g.add(dish);
+  } else if(i===2){ // education — concentric knowledge rings
+    for(let k=0;k<3;k++){ const r=new THREE.Mesh(new THREE.TorusGeometry(1.2+k*0.7,0.04,8,60),lit(k%2?PU:CY,1.4));
+      r.rotation.x=Math.PI/3*k; r.rotation.y=k; r.userData.sp=(k+1)*0.2*(k%2?-1:1); g.add(r); }
+  } else if(i===4){ // skills — floating cube matrix
+    for(let k=0;k<14;k++){ const c=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.4),lit(k%2?CY:PU,1));
+      c.position.set((Math.random()-.5)*3.4,(Math.random()-.5)*3.4,(Math.random()-.5)*3.4); c.userData.fy=Math.random()*6; g.add(c); }
+  } else if(i===5){ // awards — archery target
+    [[1.4,PK],[1.0,0xffffff],[0.6,CY],[0.25,PU]].forEach(([r,c])=>{ const t=new THREE.Mesh(new THREE.TorusGeometry(r,0.06,8,40),lit(c,1.3)); g.add(t); });
+    const arrow=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,3,6),lit(CY,1.4)); arrow.rotation.x=Math.PI/2; arrow.position.z=1.2; g.add(arrow);
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(0.1,0.3,8),lit(CY,1.6)); tip.rotation.x=-Math.PI/2; tip.position.z=-0.3; g.add(tip);
+  } else if(i===6){ // contact — beacon antenna
+    const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.1,3,8),dark); g.add(mast);
+    const beacon=new THREE.Mesh(new THREE.OctahedronGeometry(0.55,0),lit()); beacon.position.y=1.8; g.add(beacon); g.userData.beacon=beacon;
+    for(let k=0;k<3;k++){ const r=new THREE.Mesh(new THREE.TorusGeometry(0.8+k*0.4,0.02,8,40),lit(CY,1)); r.position.y=1.8; r.rotation.x=Math.PI/2; g.add(r); }
+  }
+  return g;
+}
+
+/* ---------- section nodes along the journey ---------- */
+const NODES = [
+  { p:new THREE.Vector3(  0,  0,    0), c:CY },   // 0 hero (station)
+  { p:new THREE.Vector3(-14,  4.5,-26), c:PU },   // 1 about
+  { p:new THREE.Vector3( 13, -3,  -50), c:CY },   // 2 education
+  { p:new THREE.Vector3(-11,  6,  -74), c:PK },   // 3 projects
+  { p:new THREE.Vector3( 15,  2,  -98), c:PU },   // 4 skills
+  { p:new THREE.Vector3(-13, -4, -122), c:CY },   // 5 awards
+  { p:new THREE.Vector3(  0,  3, -146), c:PK },   // 6 contact
+];
+
+const nodeMeshes = [];
+const hoverTargets = [];
+const linePts = [];
+NODES.forEach((nd, i)=>{
+  linePts.push(nd.p.clone());
+  if(i===0) return; // station already at origin
+  const g = new THREE.Group(); g.position.copy(nd.p);
+  const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9,1),
+    new THREE.MeshStandardMaterial({ color:nd.c, emissive:nd.c, emissiveIntensity:.9, metalness:.5, roughness:.3, wireframe:true }));
+  orb.userData.nodeI = i; hoverTargets.push(orb);
+  g.add(orb);
+  const orb2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5,0),
+    new THREE.MeshStandardMaterial({ color:nd.c, emissive:nd.c, emissiveIntensity:1.3 }));
+  g.add(orb2);
+  g.add(glowSprite(nd.c, 4.5, .5));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5,0.02,8,80),
+    new THREE.MeshStandardMaterial({ color:nd.c, emissive:nd.c, emissiveIntensity:1.4 }));
+  ring.rotation.x=Math.PI/2.3; g.add(ring);
+  const struct = buildNodeStructure(i, nd.c);
+  if(struct){ struct.position.set(0,-2.6,0); g.add(struct); g.userData.struct = struct; }
+  g.userData = Object.assign(g.userData||{}, { i, orb, orb2, ring, base:nd.c, struct });
+  scene.add(g); nodeMeshes.push(g);
+
+  if(i===3){ const car = buildCar(); car.position.set(3.6,-1.2,0); car.scale.set(0.8,0.8,0.8); g.add(car); g.userData.car=car; }
+});
+
+/* connecting line path */
+const curve = new THREE.CatmullRomCurve3(linePts);
+const lineGeo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(300));
+const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color:CY, transparent:true, opacity:.22 }));
+scene.add(line);
+// travelling pulses on the line
+const pulses = [];
+for(let i=0;i<3;i++){ const s=glowSprite(CY,1.6,.9); scene.add(s); pulses.push({s, t:i/3}); }
+
+// warp gates spaced between nodes, oriented along the flight path
+const upTmp = new THREE.Vector3(0,1,0);
+[0.13,0.3,0.47,0.63,0.8,0.93].forEach((t,idx)=>{
+  const gate = buildGate(idx%2?PU:CY);
+  const pt = curve.getPointAt(t);
+  const tan = curve.getTangentAt(t);
+  gate.position.copy(pt);
+  gate.lookAt(pt.clone().add(tan));   // gate plane perpendicular to path
+  scene.add(gate); gates.push(gate);
+});
+
+/* ---------- camera waypoints ---------- */
+const CAM = NODES.map((nd,i)=>{
+  const off = new THREE.Vector3(0, 1.6, 11);
+  if(i>0){ off.x = (i%2? 4 : -4); off.y = 1.4 + (i%3-1)*1.2; off.z = 9.5; }
+  return { pos: nd.p.clone().add(off), look: nd.p.clone() };
+});
+CAM[0].pos.set(0,1.4,12);
+
+/* ---------- postprocessing ---------- */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth*0.5, innerHeight*0.5), 0.85, 0.5, 0.82);
+composer.addPass(bloom);
+
+/* ---------- scroll → progress ---------- */
+let target = 0, eased = 0;
+function maxScroll(){ return (document.getElementById('scroll').offsetHeight - innerHeight); }
+function onScroll(){ target = Math.min(1, Math.max(0, window.scrollY / Math.max(1,maxScroll()))); }
+addEventListener('scroll', onScroll, { passive:true });
+onScroll();
+
+/* ---------- nav ---------- */
+const LABELS = ['INTRO','MISSION','TRAINING','HANGAR','SYSTEMS','HONORS','CONTACT'];
+const navEl = document.getElementById('nav');
+const panels = [...document.querySelectorAll('.panel')];
+LABELS.forEach((lb,i)=>{
+  const b = document.createElement('button');
+  b.innerHTML = `<span class="dot"></span><span class="lbl">${lb}</span>`;
+  b.onclick = ()=>{ window.scrollTo({ top: (i/(LABELS.length-1))*maxScroll(), behavior:'smooth' }); };
+  navEl.appendChild(b);
+});
+const navBtns = [...navEl.children];
+
+/* clicking a 3D node scrolls to it */
+const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+let hoverNode = -1;
+renderer.domElement.addEventListener('pointermove', e=>{
+  mouse.x = (e.clientX/innerWidth)*2-1; mouse.y = -(e.clientY/innerHeight)*2+1;
+  pmx = mouse.x; pmy = mouse.y;
+});
+renderer.domElement.style.pointerEvents='auto';
+addEventListener('click', e=>{
+  if(e.target.closest('.card,.topbar,.nav,.btn,.clink')) return;
+  mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(mouse, camera);
+  const hits = ray.intersectObjects(nodeMeshes, true);
+  if(hits.length){
+    let g=hits[0].object; while(g && g.userData.i===undefined) g=g.parent;
+    if(g){ window.scrollTo({ top:(g.userData.i/(LABELS.length-1))*maxScroll(), behavior:'smooth' }); }
+  }
+});
+
+/* ---------- rotating role text ---------- */
+const roles = ['<b>Robotics</b> Builder','<b>AI × Robotics</b> Engineer','<b>Future</b> Founder','<b>State-Medalist</b> Athlete'];
+let rIdx=0; const roleEl = document.getElementById('roleRotate');
+roleEl.innerHTML = roles[0];
+setInterval(()=>{ rIdx=(rIdx+1)%roles.length; roleEl.style.opacity=0;
+  setTimeout(()=>{ roleEl.innerHTML=roles[rIdx]; roleEl.style.opacity=1; }, 260); }, 2400);
+roleEl.style.transition='opacity .26s';
+
+/* ---------- active panel sync ---------- */
+let activeIdx = -1;
+function setActive(idx){
+  if(idx===activeIdx) return; activeIdx=idx;
+  panels.forEach((p,i)=> p.classList.toggle('show', i===idx));
+  navBtns.forEach((b,i)=> b.classList.toggle('active', i===idx));
+}
+
+/* ---------- animate ---------- */
+let pmx=0, pmy=0, parX=0, parY=0;
+const tmpPos=new THREE.Vector3(), tmpLook=new THREE.Vector3();
+const clock = new THREE.Clock();
+function smooth(t){ return t*t*(3-2*t); }
+
+function frame(){
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  eased += (target - eased) * (reduce?1:0.07);
+
+  // camera along waypoints
+  const seg = eased * (CAM.length-1);
+  const i = Math.min(CAM.length-2, Math.floor(seg));
+  const f = smooth(seg - i);
+  tmpPos.lerpVectors(CAM[i].pos, CAM[i+1].pos, f);
+  tmpLook.lerpVectors(CAM[i].look, CAM[i+1].look, f);
+
+  // mouse parallax
+  parX += ((pmx*1.4)-parX)*0.05; parY += ((pmy*0.9)-parY)*0.05;
+  camera.position.set(tmpPos.x+parX, tmpPos.y+parY, tmpPos.z);
+  camera.lookAt(tmpLook);
+
+  setActive(Math.round(seg));
+
+  // station + quad anim
+  if(!reduce){
+    station.rotation.y += dt*0.12;
+    core.rotation.x += dt*0.2; core.rotation.y -= dt*0.15;
+    coreInner.rotation.y += dt*0.5;
+    rings.forEach(r=> r.rotation.z += dt*r.userData.sp);
+    quad.position.y = 1.2 + Math.sin(t*1.4)*0.25;
+    quad.position.x = Math.cos(t*0.6)*4.2;
+    quad.position.z = Math.sin(t*0.6)*4.2;
+    quad.rotation.y = -t*0.6 + Math.PI/2;
+    quad.userData.props.forEach(h=> h.rotation.y += dt*32*h.userData.dir);
+    mono.position.y = 3.3 + Math.sin(t*0.9)*0.15;
+  }
+  mono.lookAt(camera.position);
+
+  // node pulse + billboard glow (raycast only against orbs — cheap)
+  ray.setFromCamera(new THREE.Vector2(pmx,pmy), camera);
+  const hit = ray.intersectObjects(hoverTargets, false);
+  let hv=-1; if(hit.length){ hv = hit[0].object.userData.nodeI; }
+  document.body.style.cursor = hv>=0 ? 'pointer':'default';
+  nodeMeshes.forEach(g=>{
+    const pulse = 1 + Math.sin(t*2 + g.userData.i)*0.08;
+    g.userData.orb.scale.setScalar(pulse);
+    g.userData.ring.rotation.z += dt*0.4;
+    const active = (g.userData.i===Math.round(seg)) || (g.userData.i===hv);
+    g.userData.orb2.material.emissiveIntensity = active?2.2:1.3;
+    if(!reduce) g.rotation.y += dt*0.2;
+    if(g.userData.car){ g.userData.car.userData.wheels.forEach(w=> w.rotation.y += dt*4); }
+    const st = g.userData.struct;
+    if(st && !reduce){
+      st.children.forEach(ch=>{
+        if(ch.userData.sp!==undefined) ch.rotation.z += dt*ch.userData.sp;        // knowledge rings
+        if(ch.userData.fy!==undefined) ch.position.y += Math.sin(t*1.5+ch.userData.fy)*dt*0.4; // floating cubes
+      });
+      if(g.userData.i===2) st.rotation.y += dt*0.3;
+      if(g.userData.i===6 && st.userData.beacon){ const b=st.userData.beacon; b.scale.setScalar(1+Math.sin(t*4)*0.15); b.material.emissiveIntensity=1+Math.sin(t*4)*0.6; }
+    }
+  });
+
+  // line pulses
+  pulses.forEach(pu=>{ pu.t=(pu.t+dt*0.04)%1; const pt=curve.getPointAt(pu.t); pu.s.position.copy(pt); });
+
+  // ---- world ambient motion ----
+  if(!reduce){
+    planet.rotation.y += dt*0.02; pWire.rotation.y -= dt*0.04;
+    moonPivot.rotation.y += dt*0.15;
+    planet2.rotation.y += dt*0.03;
+    asteroids.forEach(a=>{ a.rotation.x += dt*a.userData.rx; a.rotation.y += dt*a.userData.ry; a.position.y += Math.sin(t*0.5+a.userData.fx)*dt*0.3; });
+    holoSlabs.forEach(s=>{ s.rotation.y += dt*0.1; s.position.y += Math.sin(t+s.userData.fy)*dt*0.3; });
+    gates.forEach(g=>{ g.userData.ring.rotation.z += dt*g.userData.spin; const pu=0.07+Math.abs(Math.sin(t+g.position.z))*0.06; g.userData.inner.material.opacity=pu; });
+    // drone swarm orbiting the hero quad
+    drones.forEach(d=>{ const a=t*d.userData.sp*d.userData.dir + d.userData.ph;
+      d.position.set(Math.cos(a)*d.userData.r, d.userData.yA + Math.sin(t*1.2+d.userData.ph)*1.2, Math.sin(a)*d.userData.r);
+      d.rotation.x += dt*2; d.rotation.y += dt*3; });
+    grid.position.z = ((t*2)%10) - 5; grid2.position.z = -((t*1.5)%10) + 5;
+  }
+
+  // starfield drift
+  if(!reduce){ stars1.rotation.y += dt*0.005; stars2.rotation.y -= dt*0.008; }
+
+  composer.render();
+}
+frame();
+
+/* ---------- intro reveal ---------- */
+addEventListener('load', ()=> setTimeout(()=>{
+  document.getElementById('loader').classList.add('hide');
+  setActive(0);
+}, 500));
+// fallback if load already fired
+setTimeout(()=>{ document.getElementById('loader').classList.add('hide'); if(activeIdx<0) setActive(0); }, 2500);
+
+/* hide scroll hint after movement */
+addEventListener('scroll', ()=>{ document.getElementById('scrollhint').style.opacity = window.scrollY>40?0:1; }, {passive:true});
+
+/* ---------- resize ---------- */
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  bloom.setSize(innerWidth, innerHeight);
+  onScroll();
+});
+</script>
+</body>
+</html>
