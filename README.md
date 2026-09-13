@@ -1,4 +1,4 @@
-# Raghav Singhal — Command Deck (3D Resume World)
+# Raghav Singhal 
 
 An interactive, real-time 3D resume built with **Three.js**. A sci-fi space-station
 "command deck": scroll to fly the camera through 7 holographic stations, or click a
